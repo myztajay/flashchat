@@ -8,26 +8,65 @@
 
 import UIKit
 import FirebaseAuth
+import FirebaseFirestore
 
 class ChatViewController: UIViewController {
+    let db = Firestore.firestore()
     
     @IBOutlet weak var tableView: UITableView!
     @IBOutlet weak var messageTextfield: UITextField!
-    var messages: [Message] = [
-        Message(sender: "jummy", body: "sup"),
-        Message(sender: "jai", body: "where the dick pics"),
-        Message(sender: "jummy", body: "on the way!!")
-    ]
+    var messages: [Message] = []
     
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "flashchat"
         navigationItem.hidesBackButton = true
+        loadMessages()
         tableView.dataSource = self
         tableView.register(UINib(nibName: "MessageCell", bundle: nil), forCellReuseIdentifier: "ReusableCell")
     }
+    func loadMessages() {
+        db.collection("messages")
+        .order(by: "date")
+        .addSnapshotListener() { (querySnapshot, err) in
+            if let err = err {
+                print("Error getting documents: \(err)")
+            } else {
+                self.messages = []
+                if let querydocuments = querySnapshot?.documents {
+                    for document in querydocuments {
+                        let data = document.data()
+                        if let sender = data["sender"], let body = data["body"] {
+                            let currentMessage = Message(sender: sender as! String, body: body as! String)
+                            self.messages.append(currentMessage)
+                        }
+                        print("\(document.documentID) => \(document.data())")
+                    }
+                }
+                self.tableView.reloadData()
+            }
+        }
+    }
     
     @IBAction func sendPressed(_ sender: UIButton) {
+        if let sender = Auth.auth().currentUser?.email, let messsageBody = messageTextfield.text {
+            // Add a new document with a generated ID
+            var ref: DocumentReference? = nil
+            ref = db.collection("messages").addDocument(data: [
+                "sender": sender,
+                "body": messsageBody,
+                "date": Date().timeIntervalSince1970
+            ]) { err in
+                if let err = err {
+                    print("Error adding document: \(err)")
+                } else {
+                    print("Document added with ID: \(ref!.documentID)")
+                    self.messageTextfield.text = ""
+                }
+            }
+        } else {
+            print("no user")
+        }
     }
     
     @IBAction func logOutPressed(_ sender: UIBarButtonItem) {
@@ -38,8 +77,8 @@ class ChatViewController: UIViewController {
         } catch let signOutError as NSError {
             print("Error signing out: %@", signOutError)
         }
-        
     }
+    
     
 }
 
